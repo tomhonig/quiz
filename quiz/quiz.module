@@ -103,6 +103,14 @@ function quiz_form($node, &$form_state) {
     $form['#attached']['css'] = array(
         drupal_get_path('module', 'quiz') . '/quiz-admin.css',
     );
+    
+    drupal_add_js('jQuery(document).ready(function () { 
+                        jQuery(\'.quiz-options .quiz-option input[type="checkbox"]\').click(function(){
+                      
+                                jQuery(this).parents(\'.quiz-options\').find(\'input[type="checkbox"]\').not(this).val(0).attr(\'checked\', false);
+                          
+                        }); 
+                   });', 'inline');
 
     // Add the current questions to the form.
     $delta = 0;
@@ -123,12 +131,9 @@ function quiz_form($node, &$form_state) {
         $form['question_wrapper']['questions'][$key] = _quiz_question_form($key, $weight, NULL, $question_count);
     }
 
-    // We name our button 'quiz_more' to avoid conflicts with other modules using
-    // Ajax-enabled buttons with the id 'more'.
     $form['question_wrapper']['quiz_more'] = array(
         '#type' => 'submit',
         '#value' => t('More questions'),
-        '#attributes' => array('title' => t("If the amount of boxes above isn't enough, click here to add more questions.")),
         '#weight' => 1,
         '#limit_validation_errors' => array(array('questions')),
         '#submit' => array('quiz_more_questions_submit'),
@@ -146,10 +151,8 @@ function quiz_questions_js($form, $form_state) {
     return $form['question_wrapper']['questions'];
 }
 
-
 function quiz_more_questions_submit($form, &$form_state) {
 
-    // If $form_statethis is a Ajax POST, add 1, otherwise add 5 more questions to the form.
     if ($form_state['values']['quiz_more']) {
         $form_state['question_count'] = count($form_state['values']['questions']) + 2;
     }
@@ -174,8 +177,6 @@ function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
 
     $form['question'] = array(
         '#type' => 'textarea',
-        '#title' => t('New question label'),
-        '#title_display' => 'invisible',
         '#cols' => 40,
         '#rows' => 3,
         '#default_value' => ($question['question']) ? $question['question'] : '',
@@ -184,15 +185,13 @@ function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
 
     $form['weight'] = array(
         '#type' => 'weight',
-        '#title' => t('Weight for new question'),
-        '#title_display' => 'invisible',
         '#default_value' => $weight,
         '#delta' => $size,
         '#parents' => array('questions', $key, 'weight'),
     );
 
     $form['options'] = array(
-        '#prefix' => '<div id="quiz-questions">',
+        '#prefix' => '<div class="quiz-options">',
         '#suffix' => '</div>',
         '#parents' => array('questions', $key, 'options'),
     );
@@ -203,8 +202,6 @@ function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
             '#suffix' => '</div>',
             'text' => array(
                 '#type' => 'textfield',
-                '#title' => t('answear'),
-                '#title_display' => 'invisible',
                 '#size' => 30,
                 '#default_value' => ($options[$key]['text']) ? $options[$key]['text'] : '',
             ),
@@ -228,9 +225,8 @@ function quiz_node_form_submit(&$form, &$form_state) {
             unset($form_state['values']['questions'][$key]);
         }
     }
-    dsm($form_state['values']['questions']);
+
     $form_state['values']['questions'] = array_values($form_state['values']['questions']);
-    dsm($form_state['values']['questions']);
    
 }
 
@@ -340,6 +336,7 @@ function quiz_view_form($form, &$form_state, $node) {
 
     $question = $node->questions[$step];
     $options = array();
+    
     foreach ($question['options'] as $k => $option) {
         if ($option['text'] != '')
             $options[$k] = $option['text'];
@@ -351,6 +348,7 @@ function quiz_view_form($form, &$form_state, $node) {
     $form['options'] = array(
         '#type' => 'radios',
         '#options' => $options,
+        '#default_value' => null,
     );
     $form['actions'] = array(
             #  '#type' => 'actions',
@@ -383,6 +381,7 @@ function quiz_view_form_submit($form, &$form_state) {
     $form_state['storage']['step'] = $form_state['values']['step'] + 1;
     $form_state['storage']['values'][$form_state['values']['step']] = $form_state['values'];
     $form_state['rebuild'] = TRUE;
+    unset($form_state['input']['options']);
 }
 
 
@@ -390,11 +389,10 @@ function theme_quiz_questions_form($variables) {
     $form = $variables['form'];
 
     drupal_add_tabledrag('quiz-question-table', 'order', 'sibling', 'quiz-weight');
-
-    $is_admin = user_access('administer nodes');
+    
     $delta = 0;
     $rows = array();
-    $headers = array('', t('Question'), t('Image'), t('Anw'), t('Weight'));
+    $headers = array('', t('Question'), t('Image'), t('Answers'), t('Weight'));
 
 
     foreach (element_children($form) as $key) {
@@ -459,6 +457,7 @@ function template_preprocess_quiz_result(&$variables) {
         $rows[] = array(
             $image,
             $question['question'],
+           // $question['options'],
             $form['#result']['all'][$i],
         );
     }
