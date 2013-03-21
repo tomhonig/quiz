@@ -1,0 +1,7 @@
+.quiz-option .form-type-checkbox,
+.quiz-option .form-type-textfield{
+    display: inline-block;
+}
+.quiz-option{
+    margin: 5px 0;        
+}

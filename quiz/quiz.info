@@ -1,0 +1,5 @@
+;$Id$
+name = Simple Quiz
+description = "A multi steps form with Ctools"
+core = 7.x
+dependencies[] = ctools
