@@ -9,40 +9,8 @@
  * Implements hook_schema().
  */
 function quiz_schema() {
-  $schema['quiz'] = array(
-    'description' => 'Stores quiz-specific information for quiz nodes.',
-    'fields' => array(
-      'nid' => array(
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => "The quiz's {node}.nid.",
-      ),
-      'runtime' => array(
-        'type' => 'int',
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'The number of seconds past {node}.created during which the quiz is open.',
-      ),
-      'active' => array(
-        'type' => 'int',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'Boolean indicating whether or not the quiz is open.',
-      ),
-    ),
-    'primary key' => array('nid'),
-    'foreign keys' => array(
-      'quiz_node' => array(
-        'table' => 'node',
-        'columns' => array('nid' => 'nid'),
-      ),
-    ),
-  );
-
-  $schema['quiz_question'] = array(
+ 
+  $schema['quiz_questions'] = array(
     'description' => 'Stores information about all choices for all {quiz}s.',
     'fields' => array(
       'qid' => array(
@@ -57,33 +25,13 @@ function quiz_schema() {
         'not null' => TRUE,
         'default' => 0,
         'description' => 'The {node}.nid this choice belongs to.',
-      ),
-      'question' => array(
-        'type' => 'varchar',
-        'length' => 128,
-        'not null' => TRUE,
-        'default' => '',
-        'description' => 'The text for this choice.',
-        'translatable' => TRUE,
-      ),
-     'fid' => array(
-        'type' => 'int',
-        'not null' => FALSE,
-        'unsigned' => TRUE,
-        'description' => 'The image fid.',
-      ),    
-      'options' => array(
+      ),   
+     'questions' => array(
         'type' => 'blob',
         'size' => 'big',
         'not null' => TRUE,
         'serialize' => TRUE,
         'description' => 'The options for this question.',
-      ),
-      'weight' => array(
-        'type' => 'int',
-        'not null' => TRUE,
-        'default' => 0,
-        'description' => 'The sort order of this choice among all choices for the same node.',
       ),
     ),
     'indexes' => array(

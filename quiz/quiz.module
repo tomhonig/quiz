@@ -19,59 +19,6 @@ function quiz_theme() {
     );
 }
 
-function template_preprocess_quiz_questions(&$variables) {
-    $form = $variables['form'];
-
-    if (isset($form['#question']['image']) && $image = file_load($form['#question']['image'])) {
-        $image = theme('image_style', array('style_name' => 'medium', 'path' => $image->uri));
-    } else {
-        $image = '';
-    }
-
-    $variables['options'] = drupal_render($form['options']);
-    $variables['image'] = $image;
-    $variables['actions'] = drupal_render($form['action']);
-    $variables['question'] = $form['#question']['question'];
-    $variables['rest'] = drupal_render_children($form);
-}
-
-function template_preprocess_quiz_result(&$variables) {
-    $form = $variables['form'];
-    $node = $form['#node'];
-
-    $rows = array();
-    foreach ($node->questions as $i => $question) {
-        if (isset($question['image']) && $image = file_load($question['image'])) {
-            $image = theme('image_style', array('style_name' => 'thumbnail', 'path' => $image->uri));
-        } else {
-            $image = '';
-        }
-
-        $rows[] = array(
-            $image,
-            $question['question'],
-            $form['#result']['all'][$i],
-        );
-    }
-    $rows[] = array('', '', 'Totalt:' . $form['#result'][1]);
-    $header = array('Question', '', 'Score');
-    $table = theme('table', array('rows' => $rows, 'header' => $header));
-    $variables['table'] = $table;
-}
-
-/**
- * Implements hook_permission().
- */
-function quiz_permission() {
-    $perms = array(
-        'take quizs' => array(
-            'title' => t('Take quizs'),
-        ),
-    );
-
-    return $perms;
-}
-
 /**
  * Implements hook_node_info().
  */
@@ -134,7 +81,7 @@ function quiz_form($node, &$form_state) {
     if (isset($form_state['question_count'])) {
         $question_count = $form_state['question_count'];
     } else {
-        $question_count = max(2, empty($node->questions) ? 2 : count($node->questions));
+        $question_count = max(3, empty($node->questions) ? 3 : count($node->questions));
     }
 
 
@@ -199,26 +146,14 @@ function quiz_questions_js($form, $form_state) {
     return $form['question_wrapper']['questions'];
 }
 
-/**
- * Submit handler to add more questions to a quiz form.
- *
- * This handler is run regardless of whether JS is enabled or not. It makes
- * changes to the form state. If the button was clicked with JS disabled, then
- * the page is reloaded with the complete rebuilt form. If the button was
- * clicked with JS enabled, then ajax_form_callback() calls quiz_question_js() to
- * return just the changed part of the form.
- */
+
 function quiz_more_questions_submit($form, &$form_state) {
 
     // If $form_statethis is a Ajax POST, add 1, otherwise add 5 more questions to the form.
     if ($form_state['values']['quiz_more']) {
-        $n = $_GET['q'] == 'system/ajax' ? 1 : 5;
-        $form_state['question_count'] = count($form_state['values']['questions']) + $n;
+        $form_state['question_count'] = count($form_state['values']['questions']) + 2;
     }
-    // Renumber the questions. This invalidates the corresponding key/value
-    // associations in $form_state['input'], so clear that out. This requires
-    // quiz_form() to rebuild the questions with the values in
-    // $form_state['node']->question, which it does.
+
     $form_state['node']->questions = array_values($form_state['values']['questions']);
     unset($form_state['input']['questions']);
     $form_state['rebuild'] = TRUE;
@@ -256,7 +191,6 @@ function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
         '#parents' => array('questions', $key, 'weight'),
     );
 
-
     $form['options'] = array(
         '#prefix' => '<div id="quiz-questions">',
         '#suffix' => '</div>',
@@ -286,16 +220,18 @@ function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
     return $form;
 }
 
-/**
- * Form submit handler for node_form().
- *
- * Upon preview and final submission, we need to renumber quiz questions and
- * create a teaser output.
- */
-function quiz_node_form_submit(&$form, &$form_state) {
 
+function quiz_node_form_submit(&$form, &$form_state) {
     // Renumber questions.
+    foreach ($form_state['values']['questions'] as $key => $question){
+        if(empty($question['question'])){
+            unset($form_state['values']['questions'][$key]);
+        }
+    }
+    dsm($form_state['values']['questions']);
     $form_state['values']['questions'] = array_values($form_state['values']['questions']);
+    dsm($form_state['values']['questions']);
+   
 }
 
 /**
@@ -317,12 +253,12 @@ function quiz_load($nodes) {
         $quiz = new stdClass();
 
         // Load the appropriate questions into the $quiz object.
-        $quiz = db_select('quiz_question', 'c')
-                        ->fields('c', array('qid', 'options'))
+        $quiz = db_select('quiz_questions', 'c')
+                        ->fields('c', array('qid', 'questions'))
                         ->condition('c.nid', $node->nid)
                         ->execute()->fetch();
 
-        $nodes[$node->nid]->questions = unserialize($quiz->options);
+        $nodes[$node->nid]->questions = unserialize($quiz->questions);
         $nodes[$node->nid]->quizid = $quiz->qid;
     }
 }
@@ -332,13 +268,10 @@ function quiz_load($nodes) {
  */
 function quiz_insert($node) {
 
-    db_insert('quiz_question')
+    db_insert('quiz_questions')
             ->fields(array(
-                'nid' => $node->nid,
-                'question' => '',
-                'fid' => 0,
-                'options' => serialize($node->questions),
-                'weight' => 0,
+                'nid' => $node->nid,     
+                'questions' => serialize($node->questions),
             ))
             ->execute();
 }
@@ -349,20 +282,14 @@ function quiz_insert($node) {
 function quiz_update($node) {
     // Quiz questions with empty titles signifies removal. We remove all votes to
     // the removed options, so people who voted on them can vote again.
-    db_merge('quiz_question')
+    db_merge('quiz_questions')
             ->key(array('qid' => $node->quizid))
             ->fields(array(
-                'question' => '',
-                'fid' => 0,
-                'options' => serialize($node->questions),
-                'weight' => 0,
+                'questions' => serialize($node->questions),
             ))
             ->insertFields(array(
                 'nid' => $node->nid,
-                'question' => '',
-                'fid' => 0,
-                'options' => serialize($node->questions),
-                'weight' => 0,
+                'questions' => serialize($node->questions),
             ))
             ->execute();
 }
@@ -371,10 +298,8 @@ function quiz_update($node) {
  * Implements hook_delete().
  */
 function quiz_delete($node) {
-    db_delete('quiz')
-            ->condition('nid', $node->nid)
-            ->execute();
-    db_delete('quiz_question')
+
+    db_delete('quiz_questions')
             ->condition('nid', $node->nid)
             ->execute();
 }
@@ -420,13 +345,11 @@ function quiz_view_form($form, &$form_state, $node) {
             $options[$k] = $option['text'];
     }
 
-
     $form['#question'] = $question;
 
 
     $form['options'] = array(
         '#type' => 'radios',
-        //    '#title' => 'Svarsalternativ',
         '#options' => $options,
     );
     $form['actions'] = array(
@@ -444,12 +367,10 @@ function quiz_view_form($form, &$form_state, $node) {
         );
     }
 
-
     $form['step'] = array(
         '#type' => 'hidden',
         '#value' => $step,
     );
-#  $form['#submit'] = array('quiz_view_form_submit');
 
     $form['#theme'] = 'quiz_questions';
 
@@ -464,13 +385,6 @@ function quiz_view_form_submit($form, &$form_state) {
     $form_state['rebuild'] = TRUE;
 }
 
-/**
- * Validation function for processing votes
- */
-function quiz_view_form_validate($form, &$form_state) {
-
-    return true;
-}
 
 function theme_quiz_questions_form($variables) {
     $form = $variables['form'];
@@ -512,4 +426,44 @@ function theme_quiz_questions_form($variables) {
     $output = theme('table', array('header' => $headers, 'rows' => $rows, 'attributes' => array('id' => 'quiz-question-table')));
     $output .= drupal_render_children($form);
     return $output;
+}
+
+function template_preprocess_quiz_questions(&$variables) {
+    $form = $variables['form'];
+
+    if (isset($form['#question']['image']) && $image = file_load($form['#question']['image'])) {
+        $image = theme('image_style', array('style_name' => 'medium', 'path' => $image->uri));
+    } else {
+        $image = '';
+    }
+
+    $variables['options'] = drupal_render($form['options']);
+    $variables['image'] = $image;
+    $variables['actions'] = drupal_render($form['action']);
+    $variables['question'] = $form['#question']['question'];
+    $variables['rest'] = drupal_render_children($form);
+}
+
+function template_preprocess_quiz_result(&$variables) {
+    $form = $variables['form'];
+    $node = $form['#node'];
+
+    $rows = array();
+    foreach ($node->questions as $i => $question) {
+        if (isset($question['image']) && $image = file_load($question['image'])) {
+            $image = theme('image_style', array('style_name' => 'thumbnail', 'path' => $image->uri));
+        } else {
+            $image = '';
+        }
+
+        $rows[] = array(
+            $image,
+            $question['question'],
+            $form['#result']['all'][$i],
+        );
+    }
+    $rows[] = array('', '', 'Totalt:' . $form['#result'][1]);
+    $header = array('Question', '', 'Score');
+    $table = theme('table', array('rows' => $rows, 'header' => $header));
+    $variables['table'] = $table;
 }
