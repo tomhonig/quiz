@@ -314,6 +314,8 @@ function quiz_node_form_submit(&$form, &$form_state) {
  */
 function quiz_insert($node) {
 
+    usort($node->questions, "quiz_sort_questions");
+
     db_insert('quiz_questions')
             ->fields(array(
                 'nid' => $node->nid,
@@ -322,10 +324,20 @@ function quiz_insert($node) {
             ->execute();
 }
 
+function quiz_sort_questions($a, $b){
+
+    if ($a['weight'] == $b['weight']) {
+        return 0;
+    }
+    return ($a['weight'] < $b['weight']) ? -1 : 1;
+}
+
 /**
  * Implements hook_update().
  */
 function quiz_update($node) {
+
+    usort($node->questions, "quiz_sort_questions");
 
     db_merge('quiz_questions')
             ->key(array('qid' => $node->quizid))
