@@ -1,5 +1,4 @@
-;$Id$
-name = Simple Quiz
-description = "A multi steps form with Ctools"
+name = Quiz
+description = "A very simple quiz module"
 core = 7.x
 dependencies[] = image

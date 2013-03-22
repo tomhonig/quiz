@@ -11,33 +11,24 @@
 function quiz_schema() {
 
   $schema['quiz_questions'] = array(
-    'description' => 'Stores information about all choices for all {quiz}s.',
     'fields' => array(
-      'qid' => array(
-        'type' => 'serial',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'description' => 'Unique identifier for a quiz choice.',
-      ),
       'nid' => array(
         'type' => 'int',
         'unsigned' => TRUE,
         'not null' => TRUE,
         'default' => 0,
-        'description' => 'The {node}.nid this choice belongs to.',
       ),
      'questions' => array(
         'type' => 'blob',
         'size' => 'big',
         'not null' => TRUE,
         'serialize' => TRUE,
-        'description' => 'The options for this question.',
       ),
     ),
     'indexes' => array(
       'nid' => array('nid'),
     ),
-    'primary key' => array('qid'),
+    'primary key' => array('nid'),
     'foreign keys' => array(
       'quiz_node' => array(
         'table' => 'node',
@@ -47,14 +38,7 @@ function quiz_schema() {
   );
 
     $schema['quiz_results'] = array(
-    'description' => '',
-    'fields' => array(
-       'rid' => array(
-        'type' => 'serial',
-        'unsigned' => TRUE,
-        'not null' => TRUE,
-        'description' => 'Result id.',
-      ),
+    'fields' => array(       
       'nid' => array(
         'type' => 'int',
         'unsigned' => TRUE,
@@ -66,11 +50,21 @@ function quiz_schema() {
         'not null' => TRUE,
         'default' => 0,
       ),
+     'count' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'timestamp' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
     ),
     'indexes' => array(
       'nid' => array('nid'),
     ),
-    'primary key' => array('rid'),
+    'primary key' => array('nid'),
     'foreign keys' => array(
       'quiz_node' => array(
         'table' => 'node',
@@ -88,15 +82,15 @@ function quiz_schema() {
 function quiz_install() {
 
   $image_styles = array(
-    'quiz_mini' => array('width' => 60, 'height' => 60),
-    'quiz_view' => array('width' => 400, 'height' => 400)
+    'quiz_mini' => array('width' => 60, 'height' => 60, 'name' => 'image_scale_and_crop'),
+    'quiz_view' => array('width' => 480, 'height' => 360, 'name' => 'image_scale')
   );
 
   foreach($image_styles as $image_style => $data){
     $style = image_style_save(array('name' => $image_style));
 
     $effect = array(
-      'name' => 'image_scale',
+      'name' => $data['name'],
       'data' => array(
         'width' => $data['width'],
         'height' => $data['height'],
@@ -106,4 +100,18 @@ function quiz_install() {
     );
     image_effect_save($effect);
   }
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function quiz_uninstall() {
+
+  $image_styles = array(
+    'quiz_mini' => array('width' => 60, 'height' => 60),
+    'quiz_view' => array('width' => 400, 'height' => 400)
+  );
+
+  image_style_delete('quiz_mini', 'thumbnail');
+  image_style_delete('quiz_view', 'medium');
 }

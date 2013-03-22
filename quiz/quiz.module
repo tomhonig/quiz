@@ -29,27 +29,34 @@ function quiz_view_form($form, &$form_state, $node) {
 
         $form['#theme'] = 'quiz_result';
 
-        $results = array();
+        $results = 0;
         foreach ($form_state['storage']['values'] as $i => $answ) {
-            $results[] = $node->questions[$i]['options'][$answ['options']]['correct'];
-        }
+            $results += $node->quiz[$i]['options'][$answ['options']]['correct'];
+        } 
 
-        $result = array_count_values($results);
-        $form['#result'] = $result;
-        $form['#result']['all'] = $results;
         $form['#quiz_values'] = $form_state['storage']['values'];
 
-        db_insert('quiz_results')->fields(array(
-                 'nid' => $node->nid,
-                 'result' => (int) $result[1],
-              ))->execute();
+        db_merge('quiz_results')
+            ->key(array('nid' => $node->nid))
+            ->insertFields(array(
+                'nid' => $node->nid,
+            ))
+             ->fields(array(
+                'result' => (int) $results,
+                'count' => 1,
+                'timestamp' => time(),
+            ))
+            ->expression('count', 'count + 1')
+            ->expression('result', 'result + :result', array(':result' => ((int) $results)))
+            ->execute();  
+
 
         return $form;
     }
 
     $step = (isset($form_state['storage']['step'])) ? $form_state['storage']['step'] : 0;
-
-    $question = $node->questions[$step];
+    $form['#step'] = $step;
+    $question = $node->quiz[$step];
     $options = array();
 
     foreach ($question['options'] as $k => $option) {
@@ -68,13 +75,13 @@ function quiz_view_form($form, &$form_state, $node) {
         '#type' => 'actions',
     );
 
-    if(isset($node->questions[$step - 1])){
+    if(isset($node->quiz[$step - 1])){
         $form['actions']['back'] = array(
             '#type' => 'submit',
             '#value' => t('Back'),
         );
     }
-    if (isset($node->questions[$step + 1])) {
+    if (isset($node->quiz[$step + 1])) {
         $form['actions']['next'] = array(
             '#type' => 'submit',
             '#value' => t('Next'),
@@ -97,6 +104,15 @@ function quiz_view_form($form, &$form_state, $node) {
     return $form;
 }
 
+
+function quiz_view_form_validate($form, &$form_state){
+   
+    if($form_state['clicked_button']['#value'] == t('Next') && empty($form_state['values']['options'])){
+        form_set_error('options', t('You must select an answer!'));
+    }
+}
+
+
 function quiz_view_form_submit($form, &$form_state) {
 
     if($form_state['clicked_button']['#value'] == t('Back')){
@@ -118,10 +134,10 @@ function quiz_questions_js($form, $form_state) {
 function quiz_more_questions_submit($form, &$form_state) {
 
     if ($form_state['values']['quiz_more']) {
-        $form_state['question_count'] = count($form_state['values']['questions']) + 2;
+        $form_state['question_count'] = count($form_state['values']['questions']) + 1;
     }
 
-    $form_state['node']->questions = array_values($form_state['values']['questions']);
+    $form_state['node']->quiz = array_values($form_state['values']['questions']);
     unset($form_state['input']['questions']);
     $form_state['rebuild'] = TRUE;
 }
@@ -185,7 +201,6 @@ function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
 
     return $form;
 }
-
 
 /**
  * Implements hook_node_info().
@@ -251,7 +266,7 @@ function quiz_form($node, &$form_state) {
         $question_count = $form_state['question_count'];
     }
     else {
-        $question_count = max(3, empty($node->questions) ? 3 : count($node->questions));
+        $question_count = max(3, empty($node->quiz) ? 3 : count($node->quiz));
     }
 
     $form['question_wrapper'] = array(
@@ -269,9 +284,9 @@ function quiz_form($node, &$form_state) {
     $delta = 0;
     $weight = 0;
 
-    if (isset($node->questions)) {
-        $delta = count($node->questions);
-        foreach ($node->questions as $key => $question) {
+    if (isset($node->quiz)) {
+        $delta = count($node->quiz);
+        foreach ($node->quiz as $key => $question) {
             $form['question_wrapper']['questions'][$key] = _quiz_question_form($key, $question['weight'], $question, $question_count);
             $weight = max($question['weight'], $weight);
         }
@@ -305,7 +320,7 @@ function quiz_node_form_submit(&$form, &$form_state) {
             unset($form_state['values']['questions'][$key]);
         }
     }
-    $form_state['values']['questions'] = array_values($form_state['values']['questions']);
+    $form_state['values']['quiz'] = array_values($form_state['values']['questions']);
 }
 
 
@@ -314,12 +329,12 @@ function quiz_node_form_submit(&$form, &$form_state) {
  */
 function quiz_insert($node) {
 
-    usort($node->questions, "quiz_sort_questions");
+    usort($node->quiz, "quiz_sort_questions");
 
     db_insert('quiz_questions')
             ->fields(array(
                 'nid' => $node->nid,
-                'questions' => serialize($node->questions),
+                'questions' => serialize($node->quiz),
             ))
             ->execute();
 }
@@ -337,22 +352,21 @@ function quiz_sort_questions($a, $b){
  */
 function quiz_update($node) {
 
-    usort($node->questions, "quiz_sort_questions");
+    usort($node->quiz, "quiz_sort_questions");
 
     db_merge('quiz_questions')
-            ->key(array('qid' => $node->quizid))
-            ->fields(array(
-                'questions' => serialize($node->questions),
-            ))
+            ->key(array('nid' => $node->nid))
             ->insertFields(array(
                 'nid' => $node->nid,
-                'questions' => serialize($node->questions),
+            ))
+             ->fields(array(
+                'questions' => serialize($node->quiz),
             ))
             ->execute();
 }
 
 /**
- * Implements hook_delete().
+ * Implements hook_delete()
  */
 function quiz_delete($node) {
 
@@ -366,7 +380,7 @@ function quiz_delete($node) {
  */
 function quiz_view($node, $view_mode) {
 
-    if(!empty($node->questions)){
+    if(!empty($node->quiz)){
       $quiz_form = drupal_get_form('quiz_view_form', $node);
     }
     $node->content['quiz_questions'] = $quiz_form;
@@ -377,9 +391,27 @@ function quiz_view($node, $view_mode) {
 /**
  * Implements hook_validate().
  */
-function quiz_validate($node, $form) {
-    if (isset($node->title)) {
+function quiz_validate($node, $form, $form_state) {
+ 
+    foreach($form_state['values']['questions'] as $question){
+        if(!empty($question['question'])){
+            $text = $correct = 0;               
+            foreach($question['options'] as $options){
+                if(!empty($options['text'])){
+                    $text++;
+                }
+                if($options['correct']){
+                    $correct = true;
+                }
+            }
 
+            if($text < 2){
+                form_set_error('options', t('Each question must have atleast two answers'));
+            }
+            elseif(!$correct){
+                form_set_error('options', t('Each question must have one correct answer'));
+            }
+        }
     }
 }
 
@@ -387,19 +419,19 @@ function quiz_validate($node, $form) {
  * Implements hook_load().
  */
 function quiz_load($nodes) {
-    global $user;
+   
     foreach ($nodes as $node) {
 
         $quiz = new stdClass();
 
         // Load the appropriate questions into the $quiz object.
         $quiz = db_select('quiz_questions', 'c')
-                        ->fields('c', array('qid', 'questions'))
+                        ->fields('c', array('questions'))
                         ->condition('c.nid', $node->nid)
                         ->execute()->fetch();
-
-        $nodes[$node->nid]->questions = unserialize($quiz->questions);
-        $nodes[$node->nid]->quizid = $quiz->qid;
+        if($quiz){
+             $nodes[$node->nid]->quiz = unserialize($quiz->questions);
+        }
     }
 }
 
@@ -461,6 +493,9 @@ function theme_quiz_questions_form($variables) {
 function template_preprocess_quiz_questions(&$variables) {
     $form = $variables['form'];
 
+    $variables['step'] = $form['#step'];
+    $variables['count_questions'] = count($form['#node']->quiz);
+    
     if (isset($form['#question']['image']) && $image = file_load($form['#question']['image'])) {
         $image = theme('image_style', array('style_name' => 'quiz_view', 'path' => $image->uri));
     } else {
@@ -482,11 +517,15 @@ function template_preprocess_quiz_result(&$variables) {
     $form = $variables['form'];
     $node = $form['#node'];
     $values = $form['#quiz_values'];
-
+    $count_questions = count($node->quiz);
+    $results = db_query("SELECT * FROM {quiz_results} WHERE nid = :nid", array(':nid' => $node->nid))->fetch();
+    
+    $avg = round((($results->result / ($count_questions * $results->count))) * 100, 2) . '%';
+    $total = 0;
     $header = array(t('Question'), '',t('You answered'), t('Correct answer'), t('Score'));
     $rows = array();
 
-    foreach ($node->questions as $i => $question) {
+    foreach ($node->quiz as $i => $question) {
         if (isset($question['image']) && $image = file_load($question['image'])) {
             $image = theme('image_style', array('style_name' => 'quiz_mini', 'path' => $image->uri));
         } else {
@@ -502,10 +541,19 @@ function template_preprocess_quiz_result(&$variables) {
           break;
           }
         }
-
+        $total += $score;
         $rows[] = array($image, $question['question'], $user_answer, $correct_answer, $score);
     }
-
+    
+    $text = t('@count people have taken the quiz, and on average had @avg correct answers, you did @count_correct out of @count_questions questions.',
+          array(
+              '@count' => $results->count,
+              '@avg' => $avg,
+              '@count_questions' => $count_questions,
+              '@count_correct' => $total,
+            ));
+    
+    $variables['snippet'] = $text;
     $variables['results'] = theme('table', array('rows' => $rows, 'header' => $header));
     $variables['actions'] = l(t('Try it again'), 'node/'.$node->nid, array('attributes' => array('class' => array('button'))));
 }
