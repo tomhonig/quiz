@@ -9,7 +9,7 @@
  * Implements hook_schema().
  */
 function quiz_schema() {
- 
+
   $schema['quiz_questions'] = array(
     'description' => 'Stores information about all choices for all {quiz}s.',
     'fields' => array(
@@ -25,7 +25,7 @@ function quiz_schema() {
         'not null' => TRUE,
         'default' => 0,
         'description' => 'The {node}.nid this choice belongs to.',
-      ),   
+      ),
      'questions' => array(
         'type' => 'blob',
         'size' => 'big',
@@ -46,5 +46,64 @@ function quiz_schema() {
     ),
   );
 
+    $schema['quiz_results'] = array(
+    'description' => '',
+    'fields' => array(
+       'rid' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'description' => 'Result id.',
+      ),
+      'nid' => array(
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+     'result' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'nid' => array('nid'),
+    ),
+    'primary key' => array('rid'),
+    'foreign keys' => array(
+      'quiz_node' => array(
+        'table' => 'node',
+        'columns' => array('nid' => 'nid'),
+      ),
+    ),
+  );
+
   return $schema;
+}
+
+/**
+ * Implements hook_install().
+ */
+function quiz_install() {
+
+  $image_styles = array(
+    'quiz_mini' => array('width' => 60, 'height' => 60),
+    'quiz_view' => array('width' => 400, 'height' => 400)
+  );
+
+  foreach($image_styles as $image_style => $data){
+    $style = image_style_save(array('name' => $image_style));
+
+    $effect = array(
+      'name' => 'image_scale',
+      'data' => array(
+        'width' => $data['width'],
+        'height' => $data['height'],
+        'upscale' => FALSE,
+      ),
+      'isid' => $style['isid'],
+    );
+    image_effect_save($effect);
+  }
 }

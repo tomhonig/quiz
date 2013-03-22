@@ -1,4 +1,4 @@
 <div class="result">
-  RESULTAT:
-  <?php print $table; ?>
+  <?php print $results; ?>
+  <?php print $actions; ?>
 </div>
