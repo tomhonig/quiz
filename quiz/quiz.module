@@ -19,6 +19,308 @@ function quiz_theme() {
     );
 }
 
+/**
+ * Implements hook_node_info().
+ */
+function quiz_node_info() {
+    return array(
+        'quiz' => array(
+            'name' => t('Quiz'),
+            'base' => 'quiz',
+            'description' => t('A <em>quiz</em> is a quiz'),
+            'title_label' => t('Quiz name'),
+            'has_body' => FALSE,
+        )
+    );
+}
+
+/**
+ * Implements hook_field_extra_fields().
+ */
+function quiz_field_extra_fields() {
+
+    $extra['node']['quiz'] = array(
+        'form' => array(
+            'question_wrapper' => array(
+                'label' => t('Quiz questions'),
+                'description' => t('Quiz questions'),
+                'weight' => 0,
+            ),
+        ),
+        'display' => array(
+            'quiz_questions' => array(
+                'label' => t('Quiz questions'),
+                'description' => t('Quiz questions'),
+                'weight' => 0,
+            ),
+        )
+    );
+
+    return $extra;
+}
+
+ /**
+ * Implements hook_form().
+ */
+function quiz_form($node, &$form_state) {
+
+    $type = node_type_get_type($node);
+    $form_state['cache'] = TRUE;
+
+    $form['#attached'] = array(
+      'css' => array(drupal_get_path('module', 'quiz') . '/quiz-admin.css'),
+      'js' => array(drupal_get_path('module', 'quiz') . '/quiz-admin.js'),
+    );
+
+    $form['title'] = array(
+        '#type' => 'textfield',
+        '#title' => check_plain($type->title_label),
+        '#required' => TRUE,
+        '#default_value' => $node->title,
+    );
+
+    if (isset($form_state['question_count'])) {
+        $question_count = $form_state['question_count'];
+    }
+    else {
+        $question_count = max(3, empty($node->quiz) ? 3 : count($node->quiz));
+    }
+
+    $form['question_wrapper'] = array(
+        '#tree' => FALSE,
+        '#prefix' => '<div class="clearfix" id="quiz-question-wrapper">',
+        '#suffix' => '</div>',
+    );
+
+    $form['question_wrapper']['questions'] = array(
+        '#tree' => TRUE,
+        '#prefix' => '<div id="quiz-questions">',
+        '#suffix' => '</div>',
+        '#theme' => 'quiz_questions_form',
+    );
+
+    $delta = 0;
+    $weight = 0;
+
+    if (isset($node->quiz)) {
+        $delta = count($node->quiz);
+        foreach ($node->quiz as $key => $question) {
+            $form['question_wrapper']['questions'][$key] = _quiz_question_form($key, $question['weight'], $question, $question_count);
+            $weight = max($question['weight'], $weight);
+        }
+    }
+
+    for ($delta; $delta < $question_count; $delta++) {
+        $weight++;
+        $form['question_wrapper']['questions'][$delta] = _quiz_question_form($delta, $weight, NULL, $question_count);
+    }
+
+    $form['question_wrapper']['quiz_more'] = array(
+        '#type' => 'submit',
+        '#value' => t('More questions'),
+        '#limit_validation_errors' => array(array('questions')),
+        '#submit' => array('quiz_more_questions_submit'),
+        '#ajax' => array(
+            'callback' => 'quiz_questions_js',
+            'wrapper' => 'quiz-questions',
+            'effect' => 'fade',
+        ),
+    );
+
+    return $form;
+}
+
+function quiz_node_form_submit(&$form, &$form_state) {
+
+    foreach ($form_state['values']['questions'] as $key => $question){
+        if(empty($question['question'])){
+            unset($form_state['values']['questions'][$key]);
+        }
+    }
+    $form_state['values']['quiz'] = array_values($form_state['values']['questions']);
+}
+
+/**
+ * Implements hook_validate().
+ */
+function quiz_validate($node, $form, $form_state) {
+ 
+    foreach($form_state['values']['questions'] as $question){
+        if(!empty($question['question'])){
+            $text = $correct = 0;               
+            foreach($question['options'] as $options){
+                if(!empty($options['text'])){
+                    $text++;
+                }
+                if($options['correct']){
+                    $correct = true;
+                }
+            }
+            
+            if($text < 2){
+                form_set_error('options', t('Each question must have atleast two answers'));
+            }
+            elseif(!$correct){
+                form_set_error('options', t('Each question must have one correct answer'));
+            }
+        }
+    }
+}
+
+function quiz_questions_js($form, $form_state) {
+    return $form['question_wrapper']['questions'];
+}
+
+function quiz_more_questions_submit($form, &$form_state) {
+
+    if ($form_state['values']['quiz_more']) {
+        $form_state['question_count'] = count($form_state['values']['questions']) + 1;
+    }
+
+    $form_state['node']->quiz = array_values($form_state['values']['questions']);
+    unset($form_state['input']['questions']);
+    $form_state['rebuild'] = TRUE;
+}
+
+function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
+
+    $form = array(
+        '#weight' => $weight,
+    );
+
+    $form['image'] = array(
+        '#type' => 'managed_file',
+        '#default_value' => (isset($question['image'])) ? $question['image'] : NULL,
+        '#upload_location' => 'public://quiz/',
+    );
+
+    $form['question'] = array(
+        '#type' => 'textarea',
+        '#cols' => 40,
+        '#rows' => 3,
+        '#default_value' => ($question['question']) ? $question['question'] : '',
+    );
+
+    $form['weight'] = array(
+        '#type' => 'weight',
+        '#default_value' => $weight,
+        '#delta' => $size,
+    );
+
+    $form['options'] = array(
+        '#prefix' => '<div class="quiz-options">',
+        '#suffix' => '</div>',
+    );
+
+    $options = $question['options'];
+
+    for($key = 0; $key < 3; $key++) {
+
+        $form['options'][$key] = array(
+            '#prefix' => '<div class="quiz-option">',
+            '#suffix' => '</div>',
+         );
+
+        $form['options'][$key]['text'] = array(
+            '#type' => 'textfield',
+            '#size' => 30,
+            '#default_value' => ($options[$key]['text']) ? $options[$key]['text'] : '',
+        );
+
+        $form['options'][$key]['correct'] = array(
+            '#type' => 'checkbox',
+            '#title' => t('Correct'),
+            '#default_value' => ($options[$key]['correct']) ? $options[$key]['correct'] : 0,
+        );
+    }
+
+    return $form;
+}
+
+/**
+ * Implements hook_insert().
+ */
+function quiz_insert($node) {
+
+    usort($node->quiz, "quiz_sort_questions");
+
+    db_insert('quiz_questions')
+            ->fields(array(
+                'nid' => $node->nid,
+                'questions' => serialize($node->quiz),
+            ))
+            ->execute();
+}
+
+/**
+ * Implements hook_update().
+ */
+function quiz_update($node) {
+
+    usort($node->quiz, "quiz_sort_questions");
+
+    db_merge('quiz_questions')
+            ->key(array('nid' => $node->nid))
+            ->insertFields(array(
+                'nid' => $node->nid,
+            ))
+             ->fields(array(
+                'questions' => serialize($node->quiz),
+            ))
+            ->execute();
+}
+
+function quiz_sort_questions($a, $b){
+
+    if ($a['weight'] == $b['weight']) {
+        return 0;
+    }
+    return ($a['weight'] < $b['weight']) ? -1 : 1;
+}
+
+/**
+ * Implements hook_delete()
+ */
+function quiz_delete($node) {
+
+    db_delete('quiz_questions')
+            ->condition('nid', $node->nid)
+            ->execute();
+}
+
+/**
+ * Implements hook_load().
+ */
+function quiz_load($nodes) {
+   
+    foreach ($nodes as $node) {
+
+        $quiz = new stdClass();
+
+        // Load the appropriate questions into the $quiz object.
+        $quiz = db_select('quiz_questions', 'c')
+                        ->fields('c', array('questions'))
+                        ->condition('c.nid', $node->nid)
+                        ->execute()->fetch();
+        if($quiz){
+             $nodes[$node->nid]->quiz = unserialize($quiz->questions);
+        }
+    }
+}
+
+/**
+ * Implements hook_view().
+ */
+function quiz_view($node, $view_mode) {
+
+    if(!empty($node->quiz)){
+      $quiz_form = drupal_get_form('quiz_view_form', $node);
+    }
+    $node->content['quiz_questions'] = $quiz_form;
+
+    return $node;
+}
+
 
 function quiz_view_form($form, &$form_state, $node) {
 
@@ -49,7 +351,6 @@ function quiz_view_form($form, &$form_state, $node) {
             ->expression('count', 'count + 1')
             ->expression('result', 'result + :result', array(':result' => ((int) $results)))
             ->execute();  
-
 
         return $form;
     }
@@ -125,323 +426,6 @@ function quiz_view_form_submit($form, &$form_state) {
     $form_state['rebuild'] = TRUE;
     unset($form_state['input']['options']);
 }
-
-
-function quiz_questions_js($form, $form_state) {
-    return $form['question_wrapper']['questions'];
-}
-
-function quiz_more_questions_submit($form, &$form_state) {
-
-    if ($form_state['values']['quiz_more']) {
-        $form_state['question_count'] = count($form_state['values']['questions']) + 1;
-    }
-
-    $form_state['node']->quiz = array_values($form_state['values']['questions']);
-    unset($form_state['input']['questions']);
-    $form_state['rebuild'] = TRUE;
-}
-
-function _quiz_question_form($key, $weight = 0, $question = NULL, $size = 10) {
-
-    $form = array(
-        '#tree' => TRUE,
-        '#weight' => $weight,
-    );
-
-    $form['image'] = array(
-        '#type' => 'managed_file',
-        '#default_value' => (isset($question['image'])) ? $question['image'] : NULL,
-        '#upload_location' => 'public://quiz/',
-        '#parents' => array('questions', $key, 'image'),
-    );
-
-    $form['question'] = array(
-        '#type' => 'textarea',
-        '#cols' => 40,
-        '#rows' => 3,
-        '#default_value' => ($question['question']) ? $question['question'] : '',
-        '#parents' => array('questions', $key, 'question'),
-    );
-
-    $form['weight'] = array(
-        '#type' => 'weight',
-        '#default_value' => $weight,
-        '#delta' => $size,
-        '#parents' => array('questions', $key, 'weight'),
-    );
-
-    $form['options'] = array(
-        '#prefix' => '<div class="quiz-options">',
-        '#suffix' => '</div>',
-        '#parents' => array('questions', $key, 'options'),
-    );
-
-    $options = $question['options'];
-
-    for($key = 0; $key < 3; $key++) {
-
-        $form['options'][$key] = array(
-            '#prefix' => '<div class="quiz-option">',
-            '#suffix' => '</div>',
-         );
-
-        $form['options'][$key]['text'] = array(
-            '#type' => 'textfield',
-            '#size' => 30,
-            '#default_value' => ($options[$key]['text']) ? $options[$key]['text'] : '',
-        );
-
-        $form['options'][$key]['correct'] = array(
-            '#type' => 'checkbox',
-            '#title' => t('Correct'),
-            '#default_value' => ($options[$key]['correct']) ? $options[$key]['correct'] : 0,
-        );
-    }
-
-    return $form;
-}
-
-/**
- * Implements hook_node_info().
- */
-function quiz_node_info() {
-    return array(
-        'quiz' => array(
-            'name' => t('Quiz'),
-            'base' => 'quiz',
-            'description' => t('A <em>quiz</em> is a quiz'),
-            'title_label' => t('Quiz name'),
-            'has_body' => FALSE,
-        )
-    );
-}
-
-/**
- * Implements hook_field_extra_fields().
- */
-function quiz_field_extra_fields() {
-
-    $extra['node']['quiz'] = array(
-        'form' => array(
-            'question_wrapper' => array(
-                'label' => t('Quiz questions'),
-                'description' => t('Quiz questions'),
-                'weight' => 0,
-            ),
-        ),
-        'display' => array(
-            'quiz_questions' => array(
-                'label' => t('Quiz questions'),
-                'description' => t('Quiz questions'),
-                'weight' => 0,
-            ),
-        )
-    );
-
-    return $extra;
-}
-
- /**
- * Implements hook_form().
- */
-function quiz_form($node, &$form_state) {
-
-    $type = node_type_get_type($node);
-    $form_state['cache'] = TRUE;
-
-    $form['#attached'] = array(
-      'css' => array(drupal_get_path('module', 'quiz') . '/quiz-admin.css'),
-      'js' => array(drupal_get_path('module', 'quiz') . '/quiz-admin.js'),
-    );
-
-    $form['title'] = array(
-        '#type' => 'textfield',
-        '#title' => check_plain($type->title_label),
-        '#required' => TRUE,
-        '#default_value' => $node->title,
-    );
-
-    if (isset($form_state['question_count'])) {
-        $question_count = $form_state['question_count'];
-    }
-    else {
-        $question_count = max(3, empty($node->quiz) ? 3 : count($node->quiz));
-    }
-
-    $form['question_wrapper'] = array(
-        '#tree' => FALSE,
-        '#prefix' => '<div class="clearfix" id="quiz-question-wrapper">',
-        '#suffix' => '</div>',
-    );
-
-    $form['question_wrapper']['questions'] = array(
-        '#prefix' => '<div id="quiz-questions">',
-        '#suffix' => '</div>',
-        '#theme' => 'quiz_questions_form',
-    );
-
-    $delta = 0;
-    $weight = 0;
-
-    if (isset($node->quiz)) {
-        $delta = count($node->quiz);
-        foreach ($node->quiz as $key => $question) {
-            $form['question_wrapper']['questions'][$key] = _quiz_question_form($key, $question['weight'], $question, $question_count);
-            $weight = max($question['weight'], $weight);
-        }
-    }
-
-    for ($delta; $delta < $question_count; $delta++) {
-        $weight++;
-        $form['question_wrapper']['questions'][$delta] = _quiz_question_form($delta, $weight, NULL, $question_count);
-    }
-
-    $form['question_wrapper']['quiz_more'] = array(
-        '#type' => 'submit',
-        '#value' => t('More questions'),
-        '#weight' => 1,
-        '#limit_validation_errors' => array(array('questions')),
-        '#submit' => array('quiz_more_questions_submit'),
-        '#ajax' => array(
-            'callback' => 'quiz_questions_js',
-            'wrapper' => 'quiz-questions',
-            'effect' => 'fade',
-        ),
-    );
-
-    return $form;
-}
-
-function quiz_node_form_submit(&$form, &$form_state) {
-
-    foreach ($form_state['values']['questions'] as $key => $question){
-        if(empty($question['question'])){
-            unset($form_state['values']['questions'][$key]);
-        }
-    }
-    $form_state['values']['quiz'] = array_values($form_state['values']['questions']);
-}
-
-
-/**
- * Implements hook_insert().
- */
-function quiz_insert($node) {
-
-    usort($node->quiz, "quiz_sort_questions");
-
-    db_insert('quiz_questions')
-            ->fields(array(
-                'nid' => $node->nid,
-                'questions' => serialize($node->quiz),
-            ))
-            ->execute();
-}
-
-function quiz_sort_questions($a, $b){
-
-    if ($a['weight'] == $b['weight']) {
-        return 0;
-    }
-    return ($a['weight'] < $b['weight']) ? -1 : 1;
-}
-
-/**
- * Implements hook_update().
- */
-function quiz_update($node) {
-
-    usort($node->quiz, "quiz_sort_questions");
-
-    db_merge('quiz_questions')
-            ->key(array('nid' => $node->nid))
-            ->insertFields(array(
-                'nid' => $node->nid,
-            ))
-             ->fields(array(
-                'questions' => serialize($node->quiz),
-            ))
-            ->execute();
-}
-
-/**
- * Implements hook_delete()
- */
-function quiz_delete($node) {
-
-    db_delete('quiz_questions')
-            ->condition('nid', $node->nid)
-            ->execute();
-}
-
-/**
- * Implements hook_view().
- */
-function quiz_view($node, $view_mode) {
-
-    if(!empty($node->quiz)){
-      $quiz_form = drupal_get_form('quiz_view_form', $node);
-    }
-    $node->content['quiz_questions'] = $quiz_form;
-
-    return $node;
-}
-
-/**
- * Implements hook_validate().
- */
-function quiz_validate($node, $form, $form_state) {
- 
-    foreach($form_state['values']['questions'] as $question){
-        if(!empty($question['question'])){
-            $text = $correct = 0;               
-            foreach($question['options'] as $options){
-                if(!empty($options['text'])){
-                    $text++;
-                }
-                if($options['correct']){
-                    $correct = true;
-                }
-            }
-
-            if($text < 2){
-                form_set_error('options', t('Each question must have atleast two answers'));
-            }
-            elseif(!$correct){
-                form_set_error('options', t('Each question must have one correct answer'));
-            }
-        }
-    }
-}
-
-/**
- * Implements hook_load().
- */
-function quiz_load($nodes) {
-   
-    foreach ($nodes as $node) {
-
-        $quiz = new stdClass();
-
-        // Load the appropriate questions into the $quiz object.
-        $quiz = db_select('quiz_questions', 'c')
-                        ->fields('c', array('questions'))
-                        ->condition('c.nid', $node->nid)
-                        ->execute()->fetch();
-        if($quiz){
-             $nodes[$node->nid]->quiz = unserialize($quiz->questions);
-        }
-    }
-}
-
-/**
- *
- *
- * THEME HOOKS & TEMPLATE PREPROCESS FUNCTIONS
- * ------------------------------------------------------------------------------------
- * ************************************************************************************
- */
 
 /**
  * Theme the quiz table in the node form
