@@ -36,6 +36,7 @@ function quiz_menu() {
 
   return $items;
 }
+
 /**
  * Implements hook_node_info().
  */
@@ -165,6 +166,9 @@ function quiz_form($node, &$form_state) {
     return $form;
 }
 
+/**
+ * Submit handler for the quiz node.
+ */
 function quiz_node_form_submit(&$form, &$form_state) {
 
     foreach ($form_state['values']['questions'] as $key => $question){
@@ -202,16 +206,24 @@ function quiz_validate($node, $form, $form_state) {
     }
 }
 
+/**
+ * Form API ajax callback.
+ */
 function quiz_questions_js($form, $form_state) {
     return $form['question_wrapper']['questions'];
 }
 
+/**
+ * Form API ajax callback.
+ */
 function quiz_view_form_ajax($form, $form_state) {
     quiz_view_form_validate($form, $form_state);
     return $form;
 }
 
-
+/**
+ * Submit handle when adding more questions.
+ */
 function quiz_more_questions_submit($form, &$form_state) {
 
     if ($form_state['values']['quiz_more']) {
@@ -223,6 +235,9 @@ function quiz_more_questions_submit($form, &$form_state) {
     $form_state['rebuild'] = TRUE;
 }
 
+/**
+ * Form for each question.
+ */
 function _quiz_question_form($count_options, $key, $weight = 0, $question = NULL, $size = 10) {
 
     $form = array(
@@ -370,7 +385,9 @@ function quiz_view($node, $view_mode) {
     return $node;
 }
 
-
+/**
+ * The quiz form, or result.
+ */
 function quiz_view_form($form, &$form_state, $node) {
 
     $form = array();
@@ -465,7 +482,9 @@ function quiz_view_form($form, &$form_state, $node) {
     return $form;
 }
 
-
+/**
+ * Validating the question form when clicking next/back/finish
+ */
 function quiz_view_form_validate($form, &$form_state){
 
     if($form_state['clicked_button']['#value'] == t('Next') && empty($form_state['values']['options'])){
@@ -473,7 +492,9 @@ function quiz_view_form_validate($form, &$form_state){
     }
 }
 
-
+/**
+ * Submit handler.
+ */
 function quiz_view_form_submit($form, &$form_state) {
 
     if($form_state['clicked_button']['#value'] == t('Back')){
