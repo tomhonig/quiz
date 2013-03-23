@@ -105,7 +105,8 @@ function quiz_form($node, &$form_state) {
 
     $form['count_options'] = array(
         '#type' => 'select',
-        '#title' => t('Maximum number of answers for each question.'),
+        '#title' => t('Number of answers.'),
+        '#description' => t('This determines just how many possible answers there should be per question. You only need to specify two answers per question.'),
         '#default_value' => $count_options,
         '#weight' => -1,
         '#options' => drupal_map_assoc(range(2,10)),
@@ -217,7 +218,6 @@ function quiz_questions_js($form, $form_state) {
  * Form API ajax callback.
  */
 function quiz_view_form_ajax($form, $form_state) {
-    quiz_view_form_validate($form, $form_state);
     return $form;
 }
 
@@ -344,10 +344,8 @@ function quiz_sort_questions($a, $b){
  * Implements hook_delete()
  */
 function quiz_delete($node) {
-
-    db_delete('quiz_questions')
-            ->condition('nid', $node->nid)
-            ->execute();
+   db_delete('quiz_questions')->condition('nid', $node->nid)->execute();
+   db_delete('quiz_results')->condition('nid', $node->nid)->execute();
 }
 
 /**
@@ -357,9 +355,6 @@ function quiz_load($nodes) {
 
     foreach ($nodes as $node) {
 
-        $quiz = new stdClass();
-
-        // Load the appropriate questions into the $quiz object.
         $quiz = db_select('quiz_questions', 'c')
                         ->fields('c', array('questions', 'count_options'))
                         ->condition('c.nid', $node->nid)
@@ -380,8 +375,7 @@ function quiz_view($node, $view_mode) {
       $quiz_form = drupal_get_form('quiz_view_form', $node);
       $node->content['quiz_questions'] = $quiz_form;
     }
-
-
+    
     return $node;
 }
 
@@ -398,6 +392,7 @@ function quiz_view_form($form, &$form_state, $node) {
         $form['#theme'] = 'quiz_result';
 
         $results = 0;
+        
         foreach ($form_state['storage']['values'] as $i => $answ) {
             $results += $node->quiz[$i]['options'][$answ['options']]['correct'];
         }
@@ -423,12 +418,14 @@ function quiz_view_form($form, &$form_state, $node) {
 
     $step = (isset($form_state['storage']['step'])) ? $form_state['storage']['step'] : 0;
     $form['#step'] = $step;
+  
     $question = $node->quiz[$step];
+   
     $options = array();
-
     foreach ($question['options'] as $k => $option) {
-        if ($option['text'] != '')
+        if ($option['text'] != ''){
             $options[$k] = $option['text'];
+        }
     }
 
     $form['#question'] = $question;
@@ -487,7 +484,7 @@ function quiz_view_form($form, &$form_state, $node) {
  */
 function quiz_view_form_validate($form, &$form_state){
 
-    if($form_state['clicked_button']['#value'] == t('Next') && empty($form_state['values']['options'])){
+    if($form_state['clicked_button']['#value'] == t('Next') && $form_state['values']['options'] === null){
         form_set_error('options', t('You must select an answer.'));
     }
 }
@@ -579,17 +576,17 @@ function template_preprocess_quiz_questions(&$variables) {
  */
 function template_preprocess_quiz_result(&$variables) {
 
-    $form = $variables['form'];
-    $node = $form['#node'];
-    $values = $form['#quiz_values'];
+    $node = $variables['form']['#node'];
+    $values = $variables['form']['#quiz_values'];
+    
     $count_questions = count($node->quiz);
+    
     $results = db_query("SELECT * FROM {quiz_results} WHERE nid = :nid", array(':nid' => $node->nid))->fetch();
 
     $avg = round((($results->result / ($count_questions * $results->count))) * 100, 2) . '%';
+    
     $total = 0;
-    $header = array(t('Question'), '',t('You answered'), t('Correct answer'), t('Score'));
     $rows = array();
-
     foreach ($node->quiz as $i => $question) {
         if (isset($question['image']) && $image = file_load($question['image'])) {
             $image = theme('image_style', array('style_name' => 'quiz_mini', 'path' => $image->uri));
@@ -617,7 +614,9 @@ function template_preprocess_quiz_result(&$variables) {
               '@count_questions' => $count_questions,
               '@count_correct' => $total,
             ));
-
+    
+    $header = array(t('Question'), '',t('You answered'), t('Correct answer'), t('Score'));
+    
     $variables['snippet'] = $text;
     $variables['results'] = theme('table', array('rows' => $rows, 'header' => $header));
     $variables['actions'] = l(t('Try it again'), 'node/'.$node->nid, array('attributes' => array('class' => array('button'))));
