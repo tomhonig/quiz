@@ -24,6 +24,12 @@ function quiz_schema() {
         'not null' => TRUE,
         'serialize' => TRUE,
       ),
+      'count_options' => array(
+        'type' => 'int',
+        'size' => 'tiny',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
     ),
     'indexes' => array(
       'nid' => array('nid'),
@@ -38,7 +44,7 @@ function quiz_schema() {
   );
 
     $schema['quiz_results'] = array(
-    'fields' => array(       
+    'fields' => array(
       'nid' => array(
         'type' => 'int',
         'unsigned' => TRUE,
@@ -115,3 +121,4 @@ function quiz_uninstall() {
   image_style_delete('quiz_mini', 'thumbnail');
   image_style_delete('quiz_view', 'medium');
 }
+
