@@ -113,11 +113,6 @@ function quiz_install() {
  */
 function quiz_uninstall() {
 
-  $image_styles = array(
-    'quiz_mini' => array('width' => 60, 'height' => 60),
-    'quiz_view' => array('width' => 400, 'height' => 400)
-  );
-
   image_style_delete('quiz_mini', 'thumbnail');
   image_style_delete('quiz_view', 'medium');
 }
