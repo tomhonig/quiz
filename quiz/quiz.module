@@ -176,7 +176,26 @@ function quiz_node_form_submit(&$form, &$form_state) {
         if(empty($question['question'])){
             unset($form_state['values']['questions'][$key]);
         }
-    }
+        elseif(isset($form['#node']->nid)){
+                $old_fid = isset($form['#node']->quiz[$key]['image']) ? $form['#node']->quiz[$key]['image'] : NULL;
+                
+                if($old_fid != $question['image']){ //Updated image
+                    if($question['image']){
+                      $file_new = file_load($question['image']);
+                      $file_new->status = FILE_STATUS_PERMANENT;
+                      file_save($file_new);
+                      file_usage_add($file_new, 'quiz', 'node', $form['#node']->nid);                       
+                    }
+                    if($old_fid){              
+                      if($file_old = file_load($old_fid)){
+                        file_usage_delete($file_old, 'quiz', 'node', $form['#node']->nid);
+                        file_delete($file_old);
+                      }
+                    }
+                    
+                }
+            }
+        }
     $form_state['values']['quiz'] = array_values($form_state['values']['questions']);
 }
 
@@ -301,9 +320,10 @@ function _quiz_question_form($count_options, $key, $weight = 0, $question = NULL
  * Implements hook_insert().
  */
 function quiz_insert($node) {
-
+    
     usort($node->quiz, "quiz_sort_questions");
-
+    quiz_update_file_usage($node);
+    
     db_insert('quiz_questions')
             ->fields(array(
                 'nid' => $node->nid,
@@ -317,7 +337,7 @@ function quiz_insert($node) {
  * Implements hook_update().
  */
 function quiz_update($node) {
-
+    
     usort($node->quiz, "quiz_sort_questions");
 
     db_merge('quiz_questions')
@@ -330,6 +350,20 @@ function quiz_update($node) {
                 'count_options' => $node->count_options,
             ))
             ->execute();
+}
+
+function quiz_update_file_usage($node){
+     foreach ($node->quiz as $question){
+           
+         if(isset($question['image'])){  
+                
+           if($file_new = file_load($question['image'])){
+            $file_new->status = FILE_STATUS_PERMANENT;
+            file_save($file_new);
+            file_usage_add($file_new, 'quiz', 'node', $node->nid);     
+           }
+         }
+    }   
 }
 
 function quiz_sort_questions($a, $b){
