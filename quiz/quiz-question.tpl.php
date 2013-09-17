@@ -1,4 +1,4 @@
-<diiv id="quiz-wrapper" class="question">
+<div id="quiz-wrapper" class="question">
 
     <div class="quiz-image">
         <?php print $image; ?>
